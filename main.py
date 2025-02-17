@@ -22,7 +22,8 @@ app.add_middleware(
 # Allowed MIME types
 ALLOWED_MIME_TYPES = [
     "application/pdf",  # PDF
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"  # .docx
+    # Remove .docx from allowed mime types for now
+    # "application/vnd.openxmlformats-officedocument.wordprocessingml.document"  # .docx
 ]
 
 # AWS S3 Configuration
@@ -38,19 +39,19 @@ s3_client = boto3.client(
 )
 
 @app.post('/api/upload')
-async def upload_pdf(company_name: str = Form(...), file: UploadFile = Form(...)):
+async def upload_pdf(file: UploadFile = Form(...)):
     try:
-        logger.info(f"Uploading {file.filename} for {company_name}")
+        logger.info(f"Uploading {file.filename}")
         
         # Validate file type
         if file.content_type not in ALLOWED_MIME_TYPES:
             return JSONResponse(
                 status_code=400,
-                content={"message": "Invalid file type. Only PDF and DOCX files are allowed."}
+                content={"message": "Invalid file type. Only PDF files are allowed."}
             )
 
         # Define the S3 file key
-        s3_file_key = f"{company_name}/{file.filename}"
+        s3_file_key = f"{file.filename}"
 
         # Check if the file already exists in S3
         try:
