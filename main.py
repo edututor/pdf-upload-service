@@ -1,6 +1,6 @@
-from fastapi import FastAPI, UploadFile, Form
+from fastapi import FastAPI, UploadFile, Form, Request, HTTPException
 from fastapi.responses import JSONResponse
-from botocore.exceptions import NoCredentialsError
+from botocore.exceptions import NoCredentialsError, ClientError
 from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 from config import settings
@@ -103,6 +103,59 @@ async def upload_pdf(file: UploadFile = Form(...)):
             content={"message": str(e)}
         )
     
+@app.delete('/api/delete')
+async def delete_pdf(request: Request):
+    try:
+        body = await request.json()
+        document_name = body.get("document_name")
+
+        if not document_name:
+            logger.warning("document_name is missing in the request.")
+            return JSONResponse(
+                status_code=400,
+                content={"message": "document_name is required in the request body."}
+            )
+
+        logger.info(f"Deleting {document_name} from S3.")
+
+        # Check if the file exists in S3
+        try:
+            s3_client.head_object(Bucket=BUCKET_NAME, Key=document_name)
+        except ClientError as e:
+            if e.response['Error']['Code'] == "404":
+                logger.warning(f"File {document_name} not found in S3.")
+                return JSONResponse(
+                    status_code=404,
+                    content={"message": "File not found in S3."}
+                )
+            else:
+                logger.error(f"Error checking file in S3: {str(e)}")
+                return JSONResponse(
+                    status_code=500,
+                    content={"message": "Failed to check file in S3."}
+                )
+
+        # Delete the file from S3
+        s3_client.delete_object(Bucket=BUCKET_NAME, Key=document_name)
+
+        logger.info(f"Successfully deleted {document_name} from S3.")
+        return JSONResponse(
+            status_code=200,
+            content={"message": "File deleted successfully", "document_name": document_name}
+        )
+
+    except NoCredentialsError:
+        logger.error("AWS credentials not available.")
+        return JSONResponse(
+            status_code=500,
+            content={"message": "AWS credentials not available"}
+        )
+    except Exception as e:
+        logger.error(f"Failed to delete {document_name}: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"message": str(e)}
+        )
 
 # Run the app
 # To run: uvicorn filename:app --reload
